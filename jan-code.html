@@ -28,7 +28,7 @@ a#go:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radiu
 #skulls svg.on{opacity:1;transform:scale(1);animation:shake .18s infinite alternate}
 @keyframes shake{from{translate:-2px 0}to{translate:2px 1px}}
 #gotcha{position:absolute;left:0;right:0;bottom:calc(8vh + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;font:700 clamp(22px,5vw,44px)/1.2 var(--font);opacity:0;transition:opacity .6s;padding-inline:16px}
-#hint{position:absolute;left:0;right:0;top:calc(4vh + env(safe-area-inset-top,0px));text-align:center;color:#777;font:14px var(--font);opacity:0;transition:opacity .6s;padding-inline:16px}
+#hint{position:absolute;left:0;right:0;top:calc(4vh + env(safe-area-inset-top,0px));text-align:center;color:#bbb;font:15px var(--font);opacity:0;transition:opacity .6s;padding-inline:16px}
 #gotcha small{display:block;font-weight:400;font-size:14px;color:#aaa;margin-top:8px}
 @media (prefers-reduced-motion:reduce){#skulls svg.on{animation:none}}
 </style></head><body>
@@ -77,9 +77,10 @@ function resize(){ const d = Math.min(devicePixelRatio||1, 2); cv.width = innerW
 
 function newSpider(){
   const W = innerWidth, H = innerHeight, side = Math.random()*4|0;
-  const x = side===0?-20:side===1?W+20:Math.random()*W, y = side===2?-20:side===3?H+20:Math.random()*H;
+  const inside = Math.random() < .35;
+  const x = inside?Math.random()*W:side===0?-20:side===1?W+20:Math.random()*W, y = inside?Math.random()*H:side===2?-20:side===3?H+20:Math.random()*H;
   const s = 3 + Math.random()*Math.random()*14;
-  return {x, y, a: Math.atan2(H/2 - y + (Math.random()-.5)*H, W/2 - x + (Math.random()-.5)*W), s, v: .4 + Math.random()*1.8, ph: Math.random()*6.28, turn: 0};
+  return {x, y, a: Math.atan2(H/2 - y + (Math.random()-.5)*H, W/2 - x + (Math.random()-.5)*W), s, v: 1.2 + Math.random()*2.6, ph: Math.random()*6.28, turn: 0};
 }
 
 function start(){
@@ -119,8 +120,8 @@ function frame(now){
     bodies.moveTo(p.x - c*r*.9 + r*.75, p.y - s*r*.9); bodies.ellipse(p.x - c*r*.9, p.y - s*r*.9, r*.75, r*.6, p.a, 0, 6.29);
     bodies.moveTo(p.x + c*r*.35 + r*.45, p.y + s*r*.35); bodies.ellipse(p.x + c*r*.35, p.y + s*r*.35, r*.45, r*.4, p.a, 0, 6.29);
   }
-  ctx.strokeStyle = '#3a3530'; ctx.lineWidth = 1; ctx.stroke(legs);
-  ctx.fillStyle = '#2a2622'; ctx.fill(bodies);
+  ctx.strokeStyle = '#b3a797'; ctx.lineWidth = 1.2; ctx.stroke(legs);
+  ctx.fillStyle = '#8c7f70'; ctx.fill(bodies);
   raf = requestAnimationFrame(frame);
 }
 
