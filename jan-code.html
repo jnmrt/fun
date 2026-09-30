@@ -1,0 +1,151 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jan Code</title>
+<style>
+/* Layout: one quiet centred card that looks like a harmless shared-album link */
+:root{
+  --bg:#f3f4f6; --card:#ffffff; --fg:#1d2330; --muted:#6b7280; --line:#e3e6ec; --link:#2563c9;
+  --font:"Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);display:grid;place-items:center;padding-inline:16px;padding-block:24px;box-sizing:border-box}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;max-width:380px;width:100%;padding:22px;display:grid;gap:14px;box-sizing:border-box}
+.who{display:flex;gap:12px;align-items:center}
+.av{width:40px;height:40px;border-radius:50%;background:#d8dde6;display:grid;place-items:center;font-weight:700;color:#4b5563}
+.who p{margin:0;font-size:15px;line-height:1.35}
+.who small{color:var(--muted);font-size:13px}
+.thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.thumbs div{aspect-ratio:1;border-radius:6px;background:linear-gradient(135deg,#c9d3e0,#aebccf)}
+.thumbs div:nth-child(2){background:linear-gradient(135deg,#d9cbb8,#bfae97)}
+.thumbs div:nth-child(3){background:linear-gradient(135deg,#b8d0c4,#94b3a4)}
+a#go{color:var(--link);font-size:16px;font-weight:600;text-decoration:underline;cursor:pointer;word-break:break-all}
+a#go:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:3px}
+#msg{min-height:1.3em;margin:0;font-size:13px;color:var(--muted)}
+
+#stage{position:fixed;inset:0;background:#000;z-index:10;cursor:none}
+#stage canvas{position:absolute;inset:0;width:100%;height:100%}
+#skulls{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:4vw;pointer-events:none}
+#skulls svg{width:24vw;max-width:240px;opacity:0;transform:scale(.3);transition:opacity .5s, transform .5s cubic-bezier(.2,1.6,.4,1)}
+#skulls svg.on{opacity:1;transform:scale(1);animation:shake .18s infinite alternate}
+@keyframes shake{from{translate:-2px 0}to{translate:2px 1px}}
+#gotcha{position:absolute;left:0;right:0;bottom:calc(8vh + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;font:700 clamp(22px,5vw,44px)/1.2 var(--font);opacity:0;transition:opacity .6s;padding-inline:16px}
+#hint{position:absolute;left:0;right:0;top:calc(4vh + env(safe-area-inset-top,0px));text-align:center;color:#777;font:14px var(--font);opacity:0;transition:opacity .6s;padding-inline:16px}
+#gotcha small{display:block;font-weight:400;font-size:14px;color:#aaa;margin-top:8px}
+@media (prefers-reduced-motion:reduce){#skulls svg.on{animation:none}}
+</style></head><body>
+
+<main class="card">
+  <div class="who">
+    <div class="av">J</div>
+    <p>Jan hat 38 Fotos mit dir geteilt<br><small>Album: Wochenende</small></p>
+  </div>
+  <div class="thumbs"><div></div><div></div><div></div></div>
+  <a id="go" href="#" role="button">fotos.share/album/wochenende-38</a>
+  <p id="msg"></p>
+</main>
+
+<div id="stage" hidden>
+  <canvas id="cv"></canvas>
+  <div id="skulls"></div>
+  <div id="hint">Tippe, um die Spinnen zu vertreiben</div>
+  <div id="gotcha">Reingelegt!<small>Tippen oder ESC zum Beenden</small></div>
+</div>
+
+<script>
+const CLICKS_NEEDED = 10, MAX_SPIDERS = 3000;
+const go = document.getElementById('go'), msg = document.getElementById('msg');
+const stage = document.getElementById('stage'), cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const skullsBox = document.getElementById('skulls'), gotcha = document.getElementById('gotcha');
+const hint = document.getElementById('hint');
+let clicks = 0, running = false, spiders = [], raf = 0, t0 = 0, canExit = false, timers = [], cleared = false;
+
+go.addEventListener('click', e => {
+  e.preventDefault();
+  if (!running) start();
+});
+
+const skullSVG = `<svg viewBox="0 0 100 120" aria-hidden="true">
+  <path fill="#f4f1ea" d="M50 4C24 4 8 22 8 46c0 14 6 24 14 30v14c0 4 3 7 7 7h42c4 0 7-3 7-7V76c8-6 14-16 14-30C92 22 76 4 50 4z"/>
+  <ellipse cx="32" cy="50" rx="12" ry="14" fill="#000"/><ellipse cx="68" cy="50" rx="12" ry="14" fill="#000"/>
+  <circle cx="32" cy="52" r="3" fill="#c00"/><circle cx="68" cy="52" r="3" fill="#c00"/>
+  <path fill="#000" d="M50 62l-7 14h14z"/>
+  <rect x="28" y="84" width="44" height="20" fill="#f4f1ea"/>
+  <g stroke="#000" stroke-width="2.5"><line x1="37" y1="84" x2="37" y2="100"/><line x1="46" y1="84" x2="46" y2="100"/><line x1="55" y1="84" x2="55" y2="100"/><line x1="64" y1="84" x2="64" y2="100"/></g>
+  <path fill="#f4f1ea" d="M22 104h56v6c0 4-3 7-7 7H29c-4 0-7-3-7-7z"/>
+</svg>`;
+
+function resize(){ const d = Math.min(devicePixelRatio||1, 2); cv.width = innerWidth*d; cv.height = innerHeight*d; ctx.setTransform(d,0,0,d,0,0); }
+
+function newSpider(){
+  const W = innerWidth, H = innerHeight, side = Math.random()*4|0;
+  const x = side===0?-20:side===1?W+20:Math.random()*W, y = side===2?-20:side===3?H+20:Math.random()*H;
+  const s = 3 + Math.random()*Math.random()*14;
+  return {x, y, a: Math.atan2(H/2 - y + (Math.random()-.5)*H, W/2 - x + (Math.random()-.5)*W), s, v: .4 + Math.random()*1.8, ph: Math.random()*6.28, turn: 0};
+}
+
+function start(){
+  running = true; stage.hidden = false; msg.textContent = '';
+  stage.requestFullscreen?.().catch(()=>{});
+  resize(); addEventListener('resize', resize);
+  spiders = []; skullsBox.innerHTML = skullSVG + skullSVG + skullSVG;
+  t0 = performance.now(); canExit = false; cleared = false; clicks = 0;
+  timers.push(setTimeout(() => { if (!cleared) hint.style.opacity = 1; }, 2500));
+  raf = requestAnimationFrame(frame);
+}
+
+function frame(now){
+  const t = (now - t0)/1000, W = innerWidth, H = innerHeight;
+  const cap = Math.floor(MAX_SPIDERS * (1 - clicks/CLICKS_NEEDED));
+  const target = Math.min(cap, Math.floor(20 + t*t*60));
+  let alive = 0; for (const p of spiders) if (!p.flee) alive++;
+  while (alive < target) { spiders.push(newSpider()); alive++; }
+  spiders = spiders.filter(p => !(p.flee && (p.x < -60 || p.x > W+60 || p.y < -60 || p.y > H+60)));
+  ctx.fillStyle = '#000'; ctx.fillRect(0,0,W,H);
+  const legs = new Path2D(), bodies = new Path2D();
+  for (const p of spiders){
+    if (!p.flee) { p.turn += (Math.random()-.5)*.25; p.turn *= .9; p.a += p.turn*.2; }
+    p.x += Math.cos(p.a)*p.v; p.y += Math.sin(p.a)*p.v; p.ph += p.v*.35;
+    if (!p.flee && (p.x < -40 || p.x > W+40 || p.y < -40 || p.y > H+40)) p.a = Math.atan2(H/2-p.y, W/2-p.x);
+    const c = Math.cos(p.a), s = Math.sin(p.a), r = p.s;
+    for (let i = 0; i < 4; i++){
+      const off = (i-1.5)*.45*r, sw = Math.sin(p.ph + i*1.6)*.35;
+      for (const side of [-1,1]){
+        const ang = p.a + side*(1.57 + (i-1.5)*.45 + sw*side);
+        const bx = p.x + c*off, by = p.y + s*off;
+        const kx = bx + Math.cos(ang)*r*1.3, ky = by + Math.sin(ang)*r*1.3 - r*.3;
+        const fx = bx + Math.cos(ang + side*.5*(i<2?-1:1))*r*2.3, fy = by + Math.sin(ang + side*.5*(i<2?-1:1))*r*2.3;
+        legs.moveTo(bx,by); legs.lineTo(kx,ky); legs.lineTo(fx,fy);
+      }
+    }
+    bodies.moveTo(p.x - c*r*.9 + r*.75, p.y - s*r*.9); bodies.ellipse(p.x - c*r*.9, p.y - s*r*.9, r*.75, r*.6, p.a, 0, 6.29);
+    bodies.moveTo(p.x + c*r*.35 + r*.45, p.y + s*r*.35); bodies.ellipse(p.x + c*r*.35, p.y + s*r*.35, r*.45, r*.4, p.a, 0, 6.29);
+  }
+  ctx.strokeStyle = '#3a3530'; ctx.lineWidth = 1; ctx.stroke(legs);
+  ctx.fillStyle = '#2a2622'; ctx.fill(bodies);
+  raf = requestAnimationFrame(frame);
+}
+
+function stop(){
+  cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = [];
+  removeEventListener('resize', resize);
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(()=>{});
+  stage.hidden = true; gotcha.style.opacity = 0; hint.style.opacity = 0; running = false; clicks = 0; spiders = [];
+}
+// every tap scares a tenth of the spiders away; after 10 taps all are gone and the skulls come
+stage.addEventListener('click', e => {
+  if (canExit) { stop(); return; }
+  if (cleared) return;
+  clicks++;
+  const cap = Math.floor(MAX_SPIDERS * (1 - clicks/CLICKS_NEEDED));
+  const live = spiders.filter(p => !p.flee);
+  live.sort((a,b) => Math.hypot(a.x-e.clientX,a.y-e.clientY) - Math.hypot(b.x-e.clientX,b.y-e.clientY));
+  const n = clicks >= CLICKS_NEEDED ? live.length : Math.max(0, live.length - cap);
+  for (let i = 0; i < n; i++){ const p = live[i]; p.flee = true; p.v = 5 + Math.random()*5; p.a = Math.atan2(p.y-e.clientY, p.x-e.clientX); }
+  if (clicks >= CLICKS_NEEDED){
+    cleared = true; hint.style.opacity = 0;
+    [...skullsBox.children].forEach((el,i) => timers.push(setTimeout(() => el.classList.add('on'), 1200 + i*600)));
+    timers.push(setTimeout(() => { gotcha.style.opacity = 1; canExit = true; }, 3800));
+  }
+});
+addEventListener('keydown', e => { if (e.key === 'Escape' && running) stop(); });
+</script>
+</body></html>
